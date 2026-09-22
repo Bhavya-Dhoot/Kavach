@@ -2,6 +2,25 @@
 
 Sep 22, 2026 · @Byte
 
+## Table of Contents
+
+1. [Executive Summary](#1-executive-summary)
+2. [Problem Statement](#2-problem-statement)
+3. [Goals and Non-Goals](#3-goals-and-non-goals)
+4. [Target Users and Use Cases](#4-target-users-and-use-cases)
+5. [Hardware Utilization](#5-hardware-utilization)
+6. [System Architecture](#6-system-architecture)
+7. [Feature 1 — AI-Generated Content Detection (SynthID)](#7-feature-1--ai-generated-content-detection-synthid)
+8. [Feature 2 — Phishing and Scam Website Detection](#8-feature-2--phishing-and-scam-website-detection)
+9. [On-Device ML Pipeline](#9-on-device-ml-pipeline)
+10. [User Experience and Flows](#10-user-experience-and-flows)
+11. [Performance Requirements](#11-performance-requirements)
+12. [Privacy and Security](#12-privacy-and-security)
+13. [Success Metrics and KPIs](#13-success-metrics-and-kpis)
+14. [Risks and Mitigations](#14-risks-and-mitigations)
+15. [Roadmap and Milestones](#15-roadmap-and-milestones)
+16. [Competitive Landscape](#16-competitive-landscape)
+
 ## 1. Executive Summary
 
 Aegis Shield is an on-device software layer that continuously screens content rendered on a smartphone -- images, video frames, and web pages -- for two threat classes: AI-generated/manipulated media (via SynthID watermark detection, backed by a local classifier fallback) and phishing/scam websites (via on-device URL and page-content analysis). All inference runs locally on the Snapdragon 8 Elite Gen 5's NPU and the dedicated Q3 co-processor, with zero content leaving the device.
