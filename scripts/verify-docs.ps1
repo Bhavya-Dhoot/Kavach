@@ -60,12 +60,28 @@ $requiredDocs = @(
     'docs/architecture.md',
     'docs/roadmap.md',
     'docs/metrics-and-risks.md',
-    'scripts/verify-docs.ps1'
+    'scripts/verify-docs.ps1',
+    'engine/package.json',
+    'engine/tsconfig.json',
+    'engine/src/pipeline.ts',
+    'engine/src/q3/trigger.ts',
+    'engine/src/q3/urlFeatures.ts',
+    'engine/src/npu/synthid.ts',
+    'engine/src/npu/fallbackClassifier.ts',
+    'engine/src/phishing/pageAnalyzer.ts',
+    'engine/src/phishing/signatureCache.ts',
+    'engine/src/phishing/urlScorer.ts',
+    'engine/src/overlay.ts',
+    'engine/src/log.ts',
+    'engine/src/capture/frames.ts',
+    'engine/src/index.ts',
+    'engine/bin/aegis.ts',
+    'engine/fixtures/signatures.json'
 )
 foreach ($rel in $requiredDocs) {
     $p = Join-Path $repoRoot ($rel -replace '/', '\')
     if (-not (Test-Path -LiteralPath $p)) { Fail "Required file missing: $rel" }
-    elseif ((Get-Item -LiteralPath $p).Length -lt 500) { Fail "Required file too small: $rel" }
+    elseif ($rel -match '\.(md|ts|ps1)$' -and (Get-Item -LiteralPath $p).Length -lt 500) { Fail "Required file too small: $rel" }
 }
 
 # README content requirements
@@ -85,6 +101,12 @@ foreach ($rel in @('docs/architecture.md', 'docs/roadmap.md', 'docs/metrics-and-
         $txt = Read-Utf8 $p
         if ($txt -notmatch 'PRD\.md') { Fail "$rel does not reference PRD.md" }
     }
+}
+
+# Engine coherence: README documents the engine; tests reference engine modules
+$readmeRaw = Read-Utf8 $readmePath
+foreach ($n in @('engine/', 'npm test', 'AegisPipeline', 'SynthID watermark decoder')) {
+    if (-not $readmeRaw.Contains($n)) { Fail "README missing engine documentation: $n" }
 }
 
 # ---------- C4: link integrity across all markdown ----------

@@ -1,0 +1,12 @@
+export * from './types.js';
+export { AegisPipeline, type PipelineOptions } from './pipeline.js';
+export { triggerFrame } from './q3/trigger.js';
+export { extractUrlFeatures, levenshtein, BRANDS } from './q3/urlFeatures.js';
+export { decodeSynthId, embedWatermark } from './npu/synthid.js';
+export { classifyGenerativeArtifacts, classifierVerdict } from './npu/fallbackClassifier.js';
+export { loadSignatureCache } from './phishing/signatureCache.js';
+export { analyzePageContent } from './phishing/pageAnalyzer.js';
+export { scoreUrl, applyPageAnalysis, thresholdsFor } from './phishing/urlScorer.js';
+export { overlayForAi, overlayForPhishing } from './overlay.js';
+export { EncryptedLog } from './log.js';
+export { makeNaturalFrame, makeSyntheticLookingFrame, decodePpm } from './capture/frames.js';

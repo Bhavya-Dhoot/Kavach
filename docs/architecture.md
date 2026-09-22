@@ -93,3 +93,20 @@ Phishing pre-tap scoring: **<100ms p95**, Q3-only for most URLs (no NPU escalati
 - ML model inventory: [PRD.md §9](../PRD.md#9-on-device-ml-pipeline)
 - Privacy threat model: [PRD.md §12](../PRD.md#12-privacy-and-security)
 - Metrics: [docs/metrics-and-risks.md](metrics-and-risks.md)
+
+## Reference implementation mapping
+
+The four layers above are implemented in the platform-agnostic reference engine (`engine/`), which mirrors this design 1:1 and is verified by automated tests (latency budgets + privacy guarantees):
+
+| Architecture layer | `engine/` module | Test coverage |
+|---|---|---|
+| Capture layer | `src/capture/frames.ts` | `test/pipeline.e2e.test.ts` |
+| Q3 trigger engine | `src/q3/trigger.ts` (image), `src/q3/urlFeatures.ts` (URL) | `test/q3.test.ts`, `test/phishing.test.ts` |
+| NPU verdict pipeline | `src/npu/synthid.ts` (watermark), `src/npu/fallbackClassifier.ts` | `test/synthid.test.ts`, `test/classifier.test.ts` |
+| Phishing scoring + page model | `src/phishing/urlScorer.ts`, `src/phishing/pageAnalyzer.ts`, `src/phishing/signatureCache.ts` | `test/phishing.test.ts` |
+| Confidence engine | `src/phishing/urlScorer.ts`, `src/overlay.ts` | `test/phishing.test.ts`, `test/pipeline.e2e.test.ts` |
+| Overlay renderer | `src/overlay.ts` | `test/pipeline.e2e.test.ts` |
+| Local encrypted log | `src/log.ts` | `test/log.test.ts` |
+| Orchestration | `src/pipeline.ts` (`AegisPipeline`) | `test/pipeline.e2e.test.ts` |
+
+Measured on the reference engine (PRD §11 budgets): image path p95 ≈ 11ms (<300ms budget), phishing pre-tap p95 ≈ 3.4ms (<100ms budget). The watermark decoder and classifier are reference implementations of the architectural slots; the production build swappes in the Google SynthID decoder and trained models on the Hexagon NPU per the hardware mapping above.

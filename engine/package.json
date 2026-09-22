@@ -1,0 +1,24 @@
+{
+  "name": "@aegis/shield-engine",
+  "version": "0.1.0",
+  "description": "Aegis Shield on-device detection engine: Q3 triage + NPU verdict + phishing scoring, fully offline",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "aegis": "dist/bin/aegis.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/test/*.test.js\"",
+    "demo": "npm run build && node dist/bin/aegis.js demo"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

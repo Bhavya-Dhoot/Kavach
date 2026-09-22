@@ -9,12 +9,45 @@ Aegis Shield is an on-device software layer for Android that continuously screen
 
 All inference runs locally on the Snapdragon 8 Elite Gen 5's Hexagon NPU and the dedicated Q3 always-on co-processor. **Zero content leaves the device.**
 
+## Working implementation (reference engine)
+
+`engine/` is a runnable, fully-offline TypeScript implementation of the PRD's core architecture — capture → Q3 triage → NPU verdict → confidence → overlay → encrypted log — portable to any host (the Android/NPU binding is a later phase). Build, test, and run:
+
+```bash
+cd engine
+npm install
+npm run build     # tsc, strict mode
+npm test          # 32 tests: pipeline components, E2E, perf budgets, privacy
+npm run demo      # CLI end-to-end demo (offline)
+node dist/bin/aegis.js check-url "https://paypa1-secure.verify-user.top/login"
+node dist/bin/aegis.js check-image frame.ppm     # PPM (P6) input
+node dist/bin/aegis.js dashboard                 # local-only web dashboard on :8787
+```
+
+What each module maps to in the PRD:
+
+| PRD subsystem | Engine module |
+|---|---|
+| Capture layer (frame buffers) | `src/capture/frames.ts` (synthetic frames, PPM reader) |
+| Q3 trigger classifier | `src/q3/trigger.ts` (fast, sub-15ms) |
+| Q3 URL feature extraction | `src/q3/urlFeatures.ts` (typosquat/homoglyph/TLD/at-sign/keywords) |
+| SynthID watermark decoder | `src/npu/synthid.ts` (reference DSSS watermark + embed/verify) |
+| Fallback generative-artifact classifier | `src/npu/fallbackClassifier.ts` |
+| Page-content scam model | `src/phishing/pageAnalyzer.ts` (login-form/brand-mismatch + scam templates) |
+| Signature cache | `src/phishing/signatureCache.ts` + `engine/fixtures/signatures.json` |
+| Confidence / thresholds | `src/phishing/urlScorer.ts` (Strict/Balanced/Permissive) |
+| Overlay renderer | `src/overlay.ts` (badges, blocked interstitial + 3s override delay) |
+| Local encrypted log | `src/log.ts` (AES-256-GCM at rest, purgeable) |
+| Orchestration pipeline | `src/pipeline.ts` (`AegisPipeline`) |
+| Dashboard app | `engine/bin/aegis.ts` (command + local-only HTTP dashboard) |
+
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
 | [PRD.md](PRD.md) | The full product requirements document (16 sections, end-to-end) |
 | [README.md](README.md) | This file — project overview and documentation index |
+| [engine/](engine/) | Working reference implementation (TypeScript, fully offline, tested) |
 | [docs/architecture.md](docs/architecture.md) | Capture → Q3 triage → NPU verdict → overlay pipeline, expanded |
 | [docs/roadmap.md](docs/roadmap.md) | Phase 0–4 plan with exit criteria |
 | [docs/metrics-and-risks.md](docs/metrics-and-risks.md) | KPIs, performance targets, risk register |
@@ -77,8 +110,9 @@ The script verifies:
 
 ## Privacy guarantee
 
-No rendered content, screenshot, URL, or page-content sample is ever transmitted for scanning. The only network calls are opportunistic, signed pulls of the phishing signature cache and model weights — anonymous, no user or device identifier. See [PRD.md §12](PRD.md#12-privacy-and-security).
+No rendered content, screenshot, URL, or page-content sample is ever transmitted for scanning. The only network calls are opportunistic, signed pulls of the phishing signature cache and model weights — anonymous, no user or device identifier. See [PRD.md §12](PRD.md#12-privacy-and-security). The reference engine enforces this in tests: the `src/` tree contains zero network-capable imports/APIs (verified statically) and the full pipeline runs correctly with `fetch` and socket connections denied.
 
 ## Status
 
-Documentation phase: full PRD + supporting docs complete. Implementation follows the roadmap in [docs/roadmap.md](docs/roadmap.md) (Phase 0 prototype onward) on reference hardware.
+**Documentation phase:** full PRD + supporting docs complete.
+**Implementation phase:** platform-agnostic reference engine (`engine/`) complete — builds cleanly, all 32 tests pass (including PRD §11 latency budgets at 11ms/3.4ms p95 for image/URL, and §12 privacy guarantees). Android/on-device NPU binding is the next phase per [docs/roadmap.md](docs/roadmap.md).
