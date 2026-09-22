@@ -17,10 +17,14 @@ All inference runs locally on the Snapdragon 8 Elite Gen 5's Hexagon NPU and the
 cd engine
 npm install
 npm run build     # tsc, strict mode
-npm test          # 32 tests: pipeline components, E2E, perf budgets, privacy
+npm test          # full suite: pipeline, surfaces, config, digest, perf, privacy
 npm run demo      # CLI end-to-end demo (offline)
 node dist/bin/aegis.js check-url "https://paypa1-secure.verify-user.top/login"
 node dist/bin/aegis.js check-image frame.ppm     # PPM (P6) input
+node dist/bin/aegis.js scan-text "verify at https://paypa1.com/bank"  # SMS/email link
+node dist/bin/aegis.js app com.scam.app off      # per-app toggle (PRD §10)
+node dist/bin/aegis.js allow verify-user.top     # allowlist after override (PRD §12)
+node dist/bin/aegis.js digest                    # weekly digest (PRD §10)
 node dist/bin/aegis.js dashboard                 # local-only web dashboard on :8787
 ```
 
@@ -31,13 +35,17 @@ What each module maps to in the PRD:
 | Capture layer (frame buffers) | `src/capture/frames.ts` (synthetic frames, PPM reader) |
 | Q3 trigger classifier | `src/q3/trigger.ts` (fast, sub-15ms) |
 | Q3 URL feature extraction | `src/q3/urlFeatures.ts` (typosquat/homoglyph/TLD/at-sign/keywords) |
+| Video frame sampling (1fps) | `src/video/videoSampler.ts` (throttle for 30fps streams) |
 | SynthID watermark decoder | `src/npu/synthid.ts` (reference DSSS watermark + embed/verify) |
 | Fallback generative-artifact classifier | `src/npu/fallbackClassifier.ts` |
 | Page-content scam model | `src/phishing/pageAnalyzer.ts` (login-form/brand-mismatch + scam templates) |
 | Signature cache | `src/phishing/signatureCache.ts` + `engine/fixtures/signatures.json` |
+| Message scanning (SMS/email) | `src/surfaces/messageScanner.ts` (URL extraction + pre-tap scoring) |
 | Confidence / thresholds | `src/phishing/urlScorer.ts` (Strict/Balanced/Permissive) |
 | Overlay renderer | `src/overlay.ts` (badges, blocked interstitial + 3s override delay) |
 | Local encrypted log | `src/log.ts` (AES-256-GCM at rest, purgeable) |
+| Per-app toggles + allowlist | `src/configStore.ts` (settings.json, override → local allowlist) |
+| Weekly digest | `src/digest.ts` (PRD §10 "flagged 12 AI images…") |
 | Orchestration pipeline | `src/pipeline.ts` (`AegisPipeline`) |
 | Dashboard app | `engine/bin/aegis.ts` (command + local-only HTTP dashboard) |
 
@@ -115,4 +123,4 @@ No rendered content, screenshot, URL, or page-content sample is ever transmitted
 ## Status
 
 **Documentation phase:** full PRD + supporting docs complete.
-**Implementation phase:** platform-agnostic reference engine (`engine/`) complete — builds cleanly, all 32 tests pass (including PRD §11 latency budgets at 11ms/3.4ms p95 for image/URL, and §12 privacy guarantees). Android/on-device NPU binding is the next phase per [docs/roadmap.md](docs/roadmap.md).
+**Implementation phase:** platform-agnostic reference engine (`engine/`) complete — builds cleanly, all tests pass (including PRD §11 latency budgets at 11ms/3.4ms p95 for image/URL, PRD §8 message-surface scanning, PRD §9 video 1fps sampling, PRD §10 per-app toggles + weekly digest, PRD §12 allowlist/override mechanism, plus §12 privacy guarantees — zero network I/O). Android/on-device NPU binding is the next phase per [docs/roadmap.md](docs/roadmap.md).

@@ -58,12 +58,15 @@ export type Sensitivity = 'strict' | 'balanced' | 'permissive';
 
 export interface Settings {
   sensitivity: Sensitivity;
+  /** PRD §9: max frames per second sampled from video playback */
+  videoFps: number;
   /** network calls are forbidden during detection; only used by signature sync job */
   allowOpportunisticSync: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 'balanced',
+  videoFps: 1,
   allowOpportunisticSync: false,
 };
 

@@ -17,6 +17,9 @@ import { analyzePageContent } from './phishing/pageAnalyzer.js';
 import { scoreUrl, applyPageAnalysis } from './phishing/urlScorer.js';
 import { overlayForAi, overlayForPhishing } from './overlay.js';
 import { EncryptedLog, newEventId } from './log.js';
+import { ConfigStore } from './configStore.js';
+import { scanMessage, type MessageScanResult } from './surfaces/messageScanner.js';
+import { VideoSampler } from './video/videoSampler.js';
 import type { AiVerdict } from './types.js';
 
 export interface PipelineOptions {
@@ -24,6 +27,8 @@ export interface PipelineOptions {
   /** Override log directory (defaults to engine/.aegis-log) */
   logDir?: string;
   signatureCachePath?: string;
+  /** Override config/allowlist file (defaults to <logDir>/config.json) */
+  configPath?: string;
 }
 
 /**
@@ -35,16 +40,38 @@ export class AegisPipeline {
   readonly settings: Settings;
   readonly log: EncryptedLog;
   readonly signatures: SignatureCache;
+  readonly config: ConfigStore;
+  readonly videoSampler: VideoSampler;
+  /** Exposed for tests/diagnostics: the directory holding log + config. */
+  readonly dataDir: string;
 
   constructor(opts: PipelineOptions = {}) {
     this.settings = { ...DEFAULT_SETTINGS, ...opts.settings };
     const logDir = opts.logDir ?? join(process.cwd(), '.aegis-log');
     mkdirSync(logDir, { recursive: true });
+    this.dataDir = logDir;
     this.log = new EncryptedLog(join(logDir, 'events.enc'));
     this.signatures = loadSignatureCache(opts.signatureCachePath);
+    this.config = new ConfigStore(opts.configPath ?? join(logDir, 'config.json'));
+    this.videoSampler = new VideoSampler({ fps: this.settings.videoFps });
   }
 
-  processFrame(frame: FrameBuffer): FrameResult {
+  /** PRD §6 capture → Q3 → NPU verdict for a single rendered media frame. */
+  processFrame(frame: FrameBuffer, appId?: string): FrameResult {
+    if (appId !== undefined && !this.config.appEnabled(appId)) {
+      return this.skippedFrame(frame, `app '${appId}' disabled`);
+    }
+    return this.processFrameInternal(frame);
+  }
+
+  /** PRD §9: sample a video frame stream at 1fps; only emitted frames are scored. */
+  processVideo(frame: FrameBuffer, now = performance.now()): FrameResult | null {
+    const sampled = this.videoSampler.sample(frame, now);
+    if (!sampled) return null;
+    return this.processFrameInternal(sampled.frame);
+  }
+
+  private processFrameInternal(frame: FrameBuffer): FrameResult {
     const t0 = performance.now();
     const trigger = triggerFrame(frame);
     let verdict: AiVerdict;
@@ -104,7 +131,33 @@ export class AegisPipeline {
     };
   }
 
-  processUrl(url: string, pageHtml?: string): UrlResult {
+  processUrl(url: string, pageHtml?: string, appId?: string): UrlResult {
+    const parsed = extractUrlFeatures(url);
+    if (appId !== undefined && !this.config.appEnabled(appId)) {
+      return this.skippedUrl(url, parsed.host, `app '${appId}' disabled`);
+    }
+    if (this.config.isAllowed(parsed.host)) {
+      // PRD §12: user override adds host to local allowlist — skip scanning.
+      const event: DetectionEvent = {
+        id: newEventId(),
+        timestamp: new Date().toISOString(),
+        channel: 'phishing',
+        source: 'link',
+        verdict: 'safe',
+        confidence: 0,
+        signals: ['allowlisted'],
+        overlay: 'badge-link-risk',
+      };
+      return {
+        verdict: { level: 'safe', score: 0, signals: ['allowlisted'], explanation: 'User-allowed host' },
+        escalatedToPageModel: false,
+        scoreMs: 0,
+        totalMs: 0,
+        overlay: overlayForPhishing('safe', 'User-allowed host'),
+        event,
+      };
+    }
+
     const t0 = performance.now();
     const trig = extractUrlFeatures(url);
     let verdict = scoreUrl(
@@ -145,6 +198,79 @@ export class AegisPipeline {
       scoreMs,
       totalMs: performance.now() - t0,
       overlay,
+      event,
+    };
+  }
+
+  /** PRD: override a Blocked verdict → persist to allowlist so host is exempt. */
+  overrideBlocked(host: string, reason?: string): void {
+    this.config.overrideBlocked(host, reason ?? 'user override');
+  }
+
+  /** PRD §10: per-app kill switch flips a cached skip without scoring. */
+  setAppEnabled(appId: string, enabled: boolean): void {
+    this.config.setAppPolicy(appId, { enabled });
+  }
+
+  /**
+   * PRD §8: a link surfaced anywhere (SMS / email / messaging app). Extracts
+   * every URL from message text and pre-tap scores each.
+   */
+  processMessage(text: string, appId?: string): MessageScanResult {
+    return scanMessage(this, text);
+  }
+
+  private skippedFrame(frame: FrameBuffer, reason: string): FrameResult {
+    const verdict: AiVerdict = {
+      type: 'no-detection',
+      confidence: 0,
+      method: 'classifier',
+      label: reason,
+    };
+    const event: DetectionEvent = {
+      id: newEventId(),
+      timestamp: new Date().toISOString(),
+      channel: 'ai-media',
+      source: frame.kind,
+      verdict: 'no-detection',
+      confidence: 0,
+      signals: [reason],
+      overlay: 'badge-confirmed',
+    };
+    return {
+      verdict,
+      escalatedToNpu: false,
+      triggerMs: 0,
+      verdictMs: 0,
+      totalMs: 0,
+      overlay: overlayForAi(verdict),
+      event,
+    };
+  }
+
+  private skippedUrl(url: string, host: string, reason: string): UrlResult {
+    const verdict = {
+      level: 'safe' as const,
+      score: 0,
+      signals: [reason],
+      explanation: reason,
+    };
+    const event: DetectionEvent = {
+      id: newEventId(),
+      timestamp: new Date().toISOString(),
+      channel: 'phishing',
+      source: 'link',
+      verdict: 'safe',
+      confidence: 0,
+      signals: [reason],
+      overlay: 'badge-link-risk',
+    };
+    return {
+      verdict,
+      escalatedToPageModel: false,
+      scoreMs: 0,
+      totalMs: 0,
+      overlay: overlayForPhishing('safe', reason),
       event,
     };
   }

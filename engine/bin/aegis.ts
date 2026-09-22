@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { AegisPipeline } from '../src/pipeline.js';
 import { embedWatermark } from '../src/npu/synthid.js';
+import { buildDigest } from '../src/digest.js';
 import {
   makeNaturalFrame,
   makeSyntheticLookingFrame,
@@ -112,6 +113,49 @@ function runCheckImage(path: string): void {
   console.log(JSON.stringify({ path, verdict: r.verdict, overlay: r.overlay, totalMs: r.totalMs }, null, 2));
 }
 
+function runScanText(text: string): void {
+  const r = pipeline.processMessage(text);
+  const out = {
+    worst: r.worst,
+    hits: r.hits.map((h, i) => ({
+      url: h.url,
+      verdict: r.verdicts[i].verdict,
+      overlay: r.verdicts[i].overlay,
+    })),
+  };
+  console.log(JSON.stringify(out, null, 2));
+}
+
+function runApp(argv: string[]): void {
+  const [appId, state] = argv;
+  if (!appId || !state) { console.error('usage: aegis app <appId> <on|off>'); process.exit(2); }
+  pipeline.setAppEnabled(appId, state === 'on');
+  console.log(`app '${appId}' scanning ${state === 'on' ? 'enabled' : 'disabled'} (persisted)`);
+}
+
+function runAllow(argv: string[]): void {
+  const host = argv[0];
+  if (!host) { console.error('usage: aegis allow <host>'); process.exit(2); }
+  pipeline.overrideBlocked(host, 'cli allow');
+  console.log(`host '${host}' allowlisted — future scans exempt until purged`);
+}
+
+function runDisallow(argv: string[]): void {
+  const host = argv[0];
+  if (!host) { console.error('usage: aegis disallow <host>'); process.exit(2); }
+  pipeline.config.removeAllow(host);
+  console.log(`host '${host}' removed from allowlist`);
+}
+
+function runAllowlist(): void {
+  console.log(JSON.stringify(pipeline.config.allowlistEntries, null, 2));
+}
+
+function runDigest(): void {
+  const d = buildDigest(pipeline.log.readAll());
+  console.log(JSON.stringify(d, null, 2));
+}
+
 function startDashboard(port = 8787): void {
   const server = createServer((req, res) => {
     const events = pipeline.log.readAll();
@@ -172,6 +216,25 @@ switch (cmd) {
     if (!args[0]) { console.error('usage: aegis check-image <file.ppm>'); process.exit(2); }
     runCheckImage(args[0]);
     break;
+  case 'scan-text':
+    if (!args[0]) { console.error('usage: aegis scan-text "<message text>"'); process.exit(2); }
+    runScanText(args.join(' '));
+    break;
+  case 'app':
+    runApp(args);
+    break;
+  case 'allow':
+    runAllow(args);
+    break;
+  case 'disallow':
+    runDisallow(args);
+    break;
+  case 'allowlist':
+    runAllowlist();
+    break;
+  case 'digest':
+    runDigest();
+    break;
   case 'dashboard':
     startDashboard(args[0] ? Number(args[0]) : 8787);
     break;
@@ -182,6 +245,12 @@ Usage:
   aegis demo                     Run end-to-end offline demo
   aegis check-url <url>          Score a URL (phishing engine)
   aegis check-image <file.ppm>   Score a PPM image (AI-content engine)
+  aegis scan-text "<text>"       Extract + score every URL in SMS/email text
+  aegis app <appId> <on|off>     Per-app scanning toggle (PRD §10)
+  aegis allow <host>             Allowlist a host after override (PRD §12)
+  aegis disallow <host>          Remove a host from the allowlist
+  aegis allowlist                Show local allowlist
+  aegis digest                   Weekly digest (PRD §10)
   aegis dashboard [port]         Local-only dashboard (default 8787)
 `);
     process.exit(cmd ? 2 : 0);

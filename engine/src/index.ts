@@ -9,4 +9,8 @@ export { analyzePageContent } from './phishing/pageAnalyzer.js';
 export { scoreUrl, applyPageAnalysis, thresholdsFor } from './phishing/urlScorer.js';
 export { overlayForAi, overlayForPhishing } from './overlay.js';
 export { EncryptedLog } from './log.js';
+export { ConfigStore, type AppPolicy, type AllowlistEntry } from './configStore.js';
+export { extractUrls, scanMessage, type MessageScanResult } from './surfaces/messageScanner.js';
+export { VideoSampler, type SampledFrame } from './video/videoSampler.js';
+export { buildDigest, weekStartOf, type Digest } from './digest.js';
 export { makeNaturalFrame, makeSyntheticLookingFrame, decodePpm } from './capture/frames.js';
